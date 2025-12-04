@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>GeoDash — Roblox Timeline Edition</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="ui">
+    <div id="home">
+      <div class="logo">GeoDash</div>
+      <div class="subtitle">Roblox Timeline Edition</div>
+      <div class="level-select">
+        <button id="prevLevel" aria-label="Previous level">◀</button>
+        <div id="levelName">Level 1 — 2006</div>
+        <button id="nextLevel" aria-label="Next level">▶</button>
+      </div>
+      <button id="playBtn" class="primary">Play</button>
+      <div class="hint">Use Space or Up to jump. Avoid spikes. Press R to restart.</div>
+    </div>
+
+    <div id="hud" class="hidden">
+      <div id="hudLevel"></div>
+      <div id="hudStatus"></div>
+      <button id="homeBtn" class="secondary">Home</button>
+    </div>
+
+    <div id="overlayInfo" class="overlay hidden"></div>
+  </div>
+
+  <canvas id="game" width="960" height="540" aria-label="Game canvas"></canvas>
+
+  <script src="game.js"></script>
+</body>
+</html>
