@@ -1,36 +1,68 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>GeoDash — Roblox Timeline Edition</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DashXavier — Geometry Dash Style</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="ui">
-    <div id="home">
-      <div class="logo">GeoDash</div>
-      <div class="subtitle">Roblox Timeline Edition</div>
+  <div id="app">
+    <!-- Home Screen -->
+    <div id="home" class="screen active">
+      <div class="logo">DashXavier</div>
+      <div class="subtitle">Geometry Dash-style auto-runner</div>
+
       <div class="level-select">
-        <button id="prevLevel" aria-label="Previous level">◀</button>
-        <div id="levelName">Level 1 — 2006</div>
-        <button id="nextLevel" aria-label="Next level">▶</button>
+        <button class="nav-btn" id="left">&larr;</button>
+        <div class="level-card">
+          <div id="level-label">Level 1</div>
+          <div id="level-info">Beat-synced, basic spikes, clean parallax</div>
+        </div>
+        <button class="nav-btn" id="right">&rarr;</button>
       </div>
-      <button id="playBtn" class="primary">Play</button>
-      <div class="hint">Use Space or Up to jump. Avoid spikes. Press R to restart.</div>
+
+      <div class="controls">
+        <button id="play">Play</button>
+        <div class="help">
+          Press Space / Click / Tap to Jump • Character auto-runs • Camera follows
+        </div>
+      </div>
     </div>
 
-    <div id="hud" class="hidden">
-      <div id="hudLevel"></div>
-      <div id="hudStatus"></div>
-      <button id="homeBtn" class="secondary">Home</button>
+    <!-- Game Screen -->
+    <div id="game" class="screen">
+      <canvas id="game-canvas" width="960" height="540"></canvas>
+      <div id="overlay">
+        <div id="overlay-text"></div>
+      </div>
+      <div id="hud">
+        <div class="hud-left">
+          <span id="hud-level">Level 1</span>
+          <span id="hud-attempt">Attempt 1</span>
+        </div>
+        <div class="hud-right">
+          <button id="pause">Pause</button>
+          <button id="home-btn">Home</button>
+        </div>
+      </div>
     </div>
 
-    <div id="overlayInfo" class="overlay hidden"></div>
+    <!-- Pause modal -->
+    <div id="pause-modal" class="modal hidden">
+      <div class="modal-card">
+        <div class="modal-title">Paused</div>
+        <div class="modal-controls">
+          <button id="resume">Resume</button>
+          <button id="restart">Restart</button>
+          <button id="quit">Quit</button>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <canvas id="game" width="960" height="540" aria-label="Game canvas"></canvas>
-
+  <script src="info.js"></script>
+  <script src="levels.js"></script>
   <script src="game.js"></script>
 </body>
 </html>
