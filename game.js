@@ -1,572 +1,482 @@
-(() => {
-  // Canvas setup
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
+import { LEVELS } from './levels.js';
+import { ROBLOX_INFO } from './info.js';
 
-  // UI elements
-  const home = document.getElementById('home');
-  const playBtn = document.getElementById('playBtn');
-  const prevLevelBtn = document.getElementById('prevLevel');
-  const nextLevelBtn = document.getElementById('nextLevel');
-  const levelNameEl = document.getElementById('levelName');
-  const hud = document.getElementById('hud');
-  const hudLevel = document.getElementById('hudLevel');
-  const hudStatus = document.getElementById('hudStatus');
-  const homeBtn = document.getElementById('homeBtn');
-  const overlayInfo = document.getElementById('overlayInfo');
+const homeScreen = document.getElementById('home');
+const gameScreen = document.getElementById('game');
+const canvas = document.getElementById('game-canvas');
+const ctx = canvas.getContext('2d');
 
-  // Input
-  const keys = { jump: false, restart: false };
+const overlayEl = document.getElementById('overlay-text');
+const hudLevel = document.getElementById('hud-level');
+const hudAttempt = document.getElementById('hud-attempt');
 
-  // Basic audio + beat scheduling (manual BPM per level)
-  let audio = null;
-  let nextBeatTime = 0;
+const leftBtn = document.getElementById('left');
+const rightBtn = document.getElementById('right');
+const playBtn = document.getElementById('play');
+const pauseBtn = document.getElementById('pause');
+const homeBtn = document.getElementById('home-btn');
 
-  // Camera and world
-  let camX = 0;
-  const gravity = 2200;     // px/s^2
-  const jumpVel = -900;     // px/s
-  const groundY = canvas.height - 120; // Ground height
-  const player = {
-    x: 120, y: groundY - 50, w: 48, h: 48,
-    vx: 300, vy: 0, onGround: true,
-    dead: false, deathTime: 0,
-    particleCooldown: 0
-  };
+const pauseModal = document.getElementById('pause-modal');
+const resumeBtn = document.getElementById('resume');
+const restartBtn = document.getElementById('restart');
+const quitBtn = document.getElementById('quit');
 
-  // Visual difficulty ramp
-  const fx = {
-    parallaxLayers: [],
-    particles: [],
-  };
+const levelLabel = document.getElementById('level-label');
+const levelInfo = document.getElementById('level-info');
 
-  // Spikes: triangles with simple AABB collision approximation
-  const spikes = []; // {x,y,w,h}
-  const staticSpikes = []; // Pre-placed spikes per level
-  const beatSpawnedSpikes = []; // Spawned on beats
+let currentLevelIndex = 0;
+let attempt = 1;
 
-  // Level/meta definition
-  const levels = [
-    {
-      name: 'Level 1 — 2006',
-      year: 2006,
-      audio: 'level1.mp3',
-      bpm: 120,
-      color: '#4da3ff',
-      info: [
-        '2006: Early Roblox era — foundational building tools, basic multiplayer, and user-generated worlds emerge.',
-        '2006: Community-driven creativity set the tone for the platform’s future growth.',
-        '2006: Simple aesthetics, emphasis on experimentation and player-made experiences.',
-      ],
-      // A few easy static spikes to start
-      staticSpikes: [
-        { x: 900, y: groundY, w: 40, h: 40 },
-        { x: 1250, y: groundY, w: 40, h: 40 },
-        { x: 1600, y: groundY, w: 40, h: 40 },
-      ],
-      fx: { parallax: true, particles: true, glow: true }
-    },
-    {
-      name: 'Level 2 — 2008',
-      year: 2008,
-      audio: 'level2.mp3',
-      bpm: 128,
-      color: '#66d9ff',
-      info: [
-        '2008: Smoother networking and expanded building features improve creation and play.',
-        '2008: Growing catalog of games; more robust scripting capabilities shape new genres.',
-        '2008: Early social features help creators reach wider audiences.'
-      ],
-      staticSpikes: [
-        { x: 850, y: groundY, w: 40, h: 40 },
-        { x: 1150, y: groundY, w: 40, h: 40 },
-        { x: 1500, y: groundY, w: 40, h: 40 },
-        { x: 1900, y: groundY, w: 40, h: 40 },
-      ],
-      fx: { parallax: true, particles: true, glow: true }
-    },
-    {
-      name: 'Level 3 — 2016',
-      year: 2016,
-      audio: 'level3.mp3',
-      bpm: 130,
-      color: '#7af5c9',
-      info: [
-        '2016: Visual updates and performance improvements elevate gameplay quality.',
-        '2016: Mobile accessibility expands the audience and creator reach.',
-        '2016: Community tools mature; discovery and game polish improve.'
-      ],
-      staticSpikes: [
-        { x: 800, y: groundY, w: 40, h: 40 },
-        { x: 1100, y: groundY, w: 40, h: 40 },
-        { x: 1350, y: groundY, w: 40, h: 40 },
-        { x: 1700, y: groundY, w: 40, h: 40 },
-        { x: 2100, y: groundY, w: 40, h: 40 },
-      ],
-      fx: { parallax: true, particles: true, glow: true }
-    },
-    {
-      name: 'Level 4 — 2018',
-      year: 2018,
-      audio: 'level4.mp3',
-      bpm: 140,
-      color: '#ffd166',
-      info: [
-        '2018: Avatars and economy features continue evolving for personalization.',
-        '2018: Engine and platform enhancements support more complex experiences.',
-        '2018: Competitive and cooperative modes flourish across genres.'
-      ],
-      staticSpikes: [
-        { x: 750, y: groundY, w: 40, h: 40 },
-        { x: 1000, y: groundY, w: 40, h: 40 },
-        { x: 1300, y: groundY, w: 40, h: 40 },
-        { x: 1650, y: groundY, w: 40, h: 40 },
-        { x: 2050, y: groundY, w: 40, h: 40 },
-        { x: 2450, y: groundY, w: 40, h: 40 },
-      ],
-      fx: { parallax: true, particles: true, glow: true }
-    },
-    {
-      name: 'Level 5 — 2025',
-      year: 2025,
-      audio: 'level5.mp3',
-      bpm: 150,
-      color: '#ff6fd8',
-      info: [
-        '2025: Ongoing improvements in creation tools and performance shape richer worlds.',
-        '2025: Cross-platform communities grow with better discovery and creator support.',
-        '2025: Visual polish, effects, and accessibility continue advancing.'
-      ],
-      staticSpikes: [
-        { x: 700, y: groundY, w: 40, h: 40 },
-        { x: 950, y: groundY, w: 40, h: 40 },
-        { x: 1200, y: groundY, w: 40, h: 40 },
-        { x: 1500, y: groundY, w: 40, h: 40 },
-        { x: 1850, y: groundY, w: 40, h: 40 },
-        { x: 2250, y: groundY, w: 40, h: 40 },
-        { x: 2650, y: groundY, w: 40, h: 40 },
-      ],
-      fx: { parallax: true, particles: true, glow: true }
-    }
-  ];
+// Audio
+let audio = null;
+let audioCtx = null;
+let trackSource = null;
+let beatFlash = 0; // 0..1
 
-  let levelIndex = 0;
-  let infoIndex = 0;
-  let running = false;
-  let lastTime = performance.now();
+// Game state
+let running = false;
+let paused = false;
+let lastTime = 0;
 
-  // Home/UI bindings
-  function updateLevelName() {
-    levelNameEl.textContent = levels[levelIndex].name;
+const player = {
+  x: 0,
+  y: 0,
+  w: 44,
+  h: 44,
+  vx: 0,
+  vy: 0,
+  onGround: false
+};
+
+let cameraX = 0;
+
+// Info cycle
+let infoIndex = 0;
+
+// Input
+let jumpQueued = false;
+
+// Utility
+function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function setScreen(home) {
+  if (home) {
+    homeScreen.classList.add('active');
+    gameScreen.classList.remove('active');
+  } else {
+    homeScreen.classList.remove('active');
+    gameScreen.classList.add('active');
   }
-  prevLevelBtn.addEventListener('click', () => {
-    levelIndex = (levelIndex - 1 + levels.length) % levels.length;
-    updateLevelName();
-  });
-  nextLevelBtn.addEventListener('click', () => {
-    levelIndex = (levelIndex + 1) % levels.length;
-    updateLevelName();
-  });
+}
 
-  playBtn.addEventListener('click', () => startLevel(levelIndex));
-  homeBtn.addEventListener('click', () => goHome());
+function updateHomeUI() {
+  const lvl = LEVELS[currentLevelIndex];
+  levelLabel.textContent = lvl.name;
+  levelInfo.textContent =
+    currentLevelIndex === 0 ? 'Beat-synced, basic spikes, clean parallax' :
+    currentLevelIndex === 1 ? 'Sharper spikes, chroma effects, faster pace' :
+    currentLevelIndex === 2 ? 'Scanlines, richer parallax, longer map' :
+    currentLevelIndex === 3 ? 'Bloom, deeper scenery, tougher timing' :
+    'Heat shimmer, max effects, final challenge';
+}
 
-  function goHome() {
-    stopAudio();
-    running = false;
-    home.classList.remove('hidden');
-    hud.classList.add('hidden');
-    overlayInfo.classList.add('hidden');
-    hudStatus.textContent = '';
+leftBtn.addEventListener('click', () => {
+  currentLevelIndex = (currentLevelIndex - 1 + LEVELS.length) % LEVELS.length;
+  updateHomeUI();
+});
+rightBtn.addEventListener('click', () => {
+  currentLevelIndex = (currentLevelIndex + 1) % LEVELS.length;
+  updateHomeUI();
+});
+
+playBtn.addEventListener('click', () => startLevel(currentLevelIndex));
+homeBtn.addEventListener('click', () => {
+  stopAudio();
+  running = false;
+  setScreen(true);
+});
+
+pauseBtn.addEventListener('click', () => {
+  if (!running) return;
+  paused = true;
+  pauseModal.classList.remove('hidden');
+  audio && audio.pause();
+});
+
+resumeBtn.addEventListener('click', () => {
+  if (!running) return;
+  paused = false;
+  pauseModal.classList.add('hidden');
+  audio && audio.play();
+});
+
+restartBtn.addEventListener('click', () => {
+  if (!running) return;
+  paused = false;
+  pauseModal.classList.add('hidden');
+  attempt++;
+  startLevel(currentLevelIndex, true);
+});
+
+quitBtn.addEventListener('click', () => {
+  stopAudio();
+  paused = false;
+  running = false;
+  pauseModal.classList.add('hidden');
+  setScreen(true);
+});
+
+// Input
+window.addEventListener('keydown', (e) => {
+  if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') {
+    e.preventDefault();
+    queueJump();
   }
+});
+canvas.addEventListener('mousedown', queueJump);
+canvas.addEventListener('touchstart', (e) => { e.preventDefault(); queueJump(); });
 
-  // Input
-  window.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') keys.jump = true;
-    if (e.code === 'KeyR') keys.restart = true;
-  });
-  window.addEventListener('keyup', (e) => {
-    if (e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW') keys.jump = false;
-    if (e.code === 'KeyR') keys.restart = false;
-  });
+function queueJump() { jumpQueued = true; }
 
-  // Start a level
-  function startLevel(idx) {
-    const lvl = levels[idx];
-    levelIndex = idx;
-    infoIndex = 0;
-    running = true;
+// Start/Stop audio
+function stopAudio() {
+  if (audio) { audio.pause(); audio = null; }
+  if (trackSource) { try { trackSource.disconnect(); } catch {} trackSource = null; }
+  if (audioCtx) { try { audioCtx.close(); } catch {} audioCtx = null; }
+}
 
-    // Reset player
-    player.x = 120;
-    player.y = groundY - player.h;
-    player.vx = 300 + idx * 30; // slight speed increase each level
-    player.vy = 0;
-    player.onGround = true;
-    player.dead = false;
-    player.deathTime = 0;
+// Beat detection (simple): flash on amplitude changes using AnalyserNode
+function setupAudio(src) {
+  stopAudio();
+  audio = new Audio(src);
+  audio.loop = false;
+  audio.preload = 'auto';
+  audio.crossOrigin = 'anonymous';
 
-    // Camera
-    camX = 0;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const track = audioCtx.createMediaElementSource(audio);
+  const analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  track.connect(analyser);
+  analyser.connect(audioCtx.destination);
+  const buffer = new Uint8Array(analyser.frequencyBinCount);
 
-    // Spikes
-    spikes.length = 0;
-    beatSpawnedSpikes.length = 0;
-    staticSpikes.length = 0;
-    lvl.staticSpikes.forEach(s => staticSpikes.push({ ...s }));
-
-    // Audio
-    stopAudio();
-    audio = new Audio(lvl.audio);
-    audio.crossOrigin = 'anonymous';
-    audio.loop = false;
-    audio.volume = 0.9;
-    audio.addEventListener('canplay', () => {
-      audio.play().catch(() => {});
-    });
-    audio.addEventListener('ended', () => {
-      hudStatus.textContent = 'Level complete!';
-      running = false;
-    });
-
-    // Beat scheduler based on BPM (simple approximation)
-    nextBeatTime = 0; // seconds since start; we’ll compare with audio.currentTime
-    overlayInfo.textContent = lvl.info[infoIndex];
-    overlayInfo.classList.remove('hidden');
-
-    // FX setup
-    setupFX(lvl);
-
-    // UI
-    home.classList.add('hidden');
-    hud.classList.remove('hidden');
-    hudLevel.textContent = lvl.name;
-    hudStatus.textContent = 'Good luck!';
-
-    // Game loop
-    lastTime = performance.now();
-    requestAnimationFrame(loop);
-  }
-
-  function stopAudio() {
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-    }
-    audio = null;
-  }
-
-  // Game loop
-  function loop(now) {
+  function probeBeat() {
     if (!running) return;
-    const dt = Math.min(0.033, (now - lastTime) / 1000); // clamp dt
-    lastTime = now;
-
-    update(dt);
-    draw();
-
-    requestAnimationFrame(loop);
+    analyser.getByteFrequencyData(buffer);
+    // crude beat: look at low frequencies average
+    let sum = 0, count = Math.min(20, buffer.length);
+    for (let i = 0; i < count; i++) sum += buffer[i];
+    const avg = sum / count;
+    const threshold = 80; // adjust as needed
+    if (avg > threshold) beatFlash = 1;
+    requestAnimationFrame(probeBeat);
   }
+  requestAnimationFrame(probeBeat);
 
-  function update(dt) {
-    const lvl = levels[levelIndex];
+  audio.play().catch(() => {
+    // user gesture may be required; will play after next interaction
+  });
+}
 
-    // Handle input
-    if ((keys.jump) && player.onGround && !player.dead) {
-      player.vy = jumpVel;
-      player.onGround = false;
-    }
-    if (keys.restart && player.dead) {
-      startLevel(levelIndex);
-      return;
-    }
+function showInfo(levelId) {
+  const infos = ROBLOX_INFO[levelId] || [];
+  if (infos.length === 0) return;
+  overlayEl.textContent = infos[infoIndex % infos.length];
+  overlayEl.style.opacity = '1';
+  overlayEl.style.transform = 'translateY(0)';
+  // fade out slowly as you go further (requested “further you go the more it disappears”)
+  setTimeout(() => {
+    overlayEl.style.opacity = '0.3';
+  }, 2000);
+}
 
-    // Physics
-    if (!player.dead) {
-      player.vy += gravity * dt;
-      player.y += player.vy * dt;
-      player.x += player.vx * dt;
-    }
+// Player reset
+function initPlayer(lvl) {
+  player.x = 60; // starts near left; camera will center
+  player.y = lvl.floorY - player.h;
+  player.vx = lvl.speed; // auto-run
+  player.vy = 0;
+  player.onGround = true;
+  cameraX = player.x - canvas.width / 2; // center character
+}
 
-    // Ground clamp
-    if (player.y + player.h >= groundY) {
-      player.y = groundY - player.h;
-      player.vy = 0;
-      player.onGround = true;
-    }
+// Collision with spikes
+function playerRect() {
+  return { x: player.x, y: player.y, w: player.w, h: player.h };
+}
+function intersects(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < (b.y + b.h) && (a.y + a.h) > b.y;
+}
 
-    // Camera follows player
-    const targetCam = player.x - canvas.width * 0.32;
-    camX += (targetCam - camX) * 0.12;
+// Restart run
+function startLevel(index, keepAttempt = false) {
+  const lvl = LEVELS[index];
+  currentLevelIndex = index;
+  if (!keepAttempt) attempt = 1;
+  infoIndex = 0;
 
-    // Beat-based spawn
-    if (audio) {
-      const t = audio.currentTime;
-      const spb = 60 / lvl.bpm;
-      while (nextBeatTime < t + 0.02) {
-        // Spawn a spike a bit ahead of player on each beat, easy spacing
-        const spawnX = player.x + 520 + Math.random() * 120;
-        beatSpawnedSpikes.push(makeSpike(spawnX, groundY));
-        nextBeatTime += spb;
-      }
-    }
+  setScreen(false);
+  hudLevel.textContent = lvl.name;
+  hudAttempt.textContent = `Attempt ${attempt}`;
 
-    // Consolidate spikes list
-    spikes.length = 0;
-    // Keep only those beat spikes that are not too close to each other; also cull far behind
-    let lastPlacedX = -Infinity;
-    for (const s of beatSpawnedSpikes) {
-      if (s.x + s.w < player.x - 800) continue;
-      if (Math.abs(s.x - lastPlacedX) < 80) continue;
-      lastPlacedX = s.x;
-      spikes.push(s);
-    }
-    for (const s of staticSpikes) spikes.push(s);
+  initPlayer(lvl);
+  running = true;
+  paused = false;
+  lastTime = performance.now();
 
-    // Check collision
-    for (const s of spikes) {
-      if (rectTriCollision(player, s)) {
-        killPlayer();
-        break;
-      }
-    }
+  // overlay info shows at start
+  showInfo(lvl.id);
 
-    // FX update
-    updateFX(dt, lvl);
+  // audio
+  setupAudio(lvl.audio);
+
+  // loop
+  requestAnimationFrame(loop);
+}
+
+function dieAndRestart() {
+  const lvl = LEVELS[currentLevelIndex];
+  attempt++;
+  infoIndex++; // next info on death
+  hudAttempt.textContent = `Attempt ${attempt}`;
+  // death particles
+  spawnParticles(player.x, player.y + player.h / 2, 22, '#ff4d6d');
+  // reset
+  initPlayer(lvl);
+  // show next info
+  showInfo(lvl.id);
+}
+
+function completeLevel() {
+  stopAudio();
+  running = false;
+  paused = false;
+  // celebratory particles
+  spawnParticles(player.x, player.y, 80, '#7ef5ff');
+  // go home after brief delay
+  setTimeout(() => setScreen(true), 1200);
+}
+
+// Particles
+const particles = [];
+function spawnParticles(x, y, count, color) {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 6,
+      vy: (Math.random() - 0.5) * 6 - 2,
+      life: 1.0,
+      color
+    });
   }
+}
 
-  function killPlayer() {
-    if (player.dead) return;
-    player.dead = true;
-    player.deathTime = performance.now();
-    hudStatus.textContent = 'You hit a spike! Press R to retry.';
-    // Cycle info text to next line
-    const lvl = levels[levelIndex];
-    infoIndex = (infoIndex + 1) % lvl.info.length;
-    overlayInfo.textContent = lvl.info[infoIndex];
-    // Small knockback
-    player.vx *= 0.4;
-    player.vy = -300;
-    // Particle burst
-    burst(player.x + player.w / 2, player.y + player.h / 2, lvl.color);
-  }
+// Rendering helpers
+function drawBackground(lvl, t) {
+  const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  g.addColorStop(0, lvl.theme.sky[0]);
+  g.addColorStop(1, lvl.theme.sky[1]);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Spike factory
-  function makeSpike(x, groundY) {
-    return { x, y: groundY, w: 40, h: 40 };
-  }
+  // parallax layers
+  lvl.theme.parallaxLayers.forEach((layer, i) => {
+    const baseY = canvas.height - layer.height;
+    const scroll = (cameraX * layer.speed) % canvas.width;
+    ctx.fillStyle = layer.color;
+    ctx.fillRect(-scroll, baseY, canvas.width + 40, layer.height);
+    ctx.fillRect(-scroll + canvas.width, baseY, canvas.width + 40, layer.height);
+  });
 
-  // Approximate rect-triangle collision using AABB and top wedge check
-  function rectTriCollision(rect, tri) {
-    // AABB overlap first
-    const rx1 = rect.x, ry1 = rect.y, rx2 = rect.x + rect.w, ry2 = rect.y + rect.h;
-    const tx1 = tri.x, ty1 = tri.y - tri.h, tx2 = tri.x + tri.w, ty2 = tri.y;
-    if (rx2 < tx1 || rx1 > tx2 || ry2 < ty1 || ry1 > ty2) return false;
-    // Approximate triangle plane: apex at (midX, ty1), base along [tx1,tx2] at ty2
-    const midX = tri.x + tri.w / 2;
-    // For each rect corner touching the triangle, check if above triangle edge lines
-    const corners = [
-      { x: rx1, y: ry1 }, { x: rx2, y: ry1 },
-      { x: rx1, y: ry2 }, { x: rx2, y: ry2 },
-    ];
-    for (const c of corners) {
-      if (pointInIsoTriangle(c.x, c.y, tx1, ty2, tx2, ty2, midX, ty1)) return true;
-    }
-    // Extra: if rect penetrates triangle area, treat as collision
-    return true; // Keep forgiving: if AABB overlaps, we collide for simplicity
-  }
-
-  // Point-in-triangle (barycentric)
-  function pointInIsoTriangle(px, py, x1, y1, x2, y2, x3, y3) {
-    const denom = ((y2 - y3)*(x1 - x3) + (x3 - x2)*(y1 - y3));
-    const a = ((y2 - y3)*(px - x3) + (x3 - x2)*(py - y3)) / denom;
-    const b = ((y3 - y1)*(px - x3) + (x1 - x3)*(py - y3)) / denom;
-    const c = 1 - a - b;
-    return a >= 0 && b >= 0 && c >= 0;
-  }
-
-  // FX setup
-  function setupFX(lvl) {
-    fx.parallaxLayers = [
-      { speed: 0.25, color: '#0c1324', hills: makeHills(0.25) },
-      { speed: 0.5, color: '#0d162b', hills: makeHills(0.5) },
-      { speed: 0.8, color: '#0f1b34', hills: makeHills(0.8) },
-    ];
-    fx.particles = [];
-  }
-
-  function makeHills(scale) {
-    const arr = [];
-    for (let i = 0; i < 10; i++) {
-      arr.push({
-        x: i * 600 + Math.random() * 300,
-        w: 500 + Math.random() * 400,
-        h: 40 + Math.random() * 120 * scale
-      });
-    }
-    return arr;
-  }
-
-  function updateFX(dt, lvl) {
-    // Trail particles from player
-    player.particleCooldown -= dt;
-    if (!player.dead && player.particleCooldown <= 0) {
-      fx.particles.push({
-        x: player.x + player.w / 2,
-        y: player.y + player.h - 6,
-        vx: -60 + Math.random() * 120,
-        vy: -40 + Math.random() * 40,
-        life: 0.6,
-        color: lvl.color
-      });
-      player.particleCooldown = 0.035 - levelIndex * 0.003;
-    }
-    // Update particles
-    for (const p of fx.particles) {
-      p.life -= dt;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      p.vy += 300 * dt;
-    }
-    // Cull
-    for (let i = fx.particles.length - 1; i >= 0; i--) {
-      if (fx.particles[i].life <= 0) fx.particles.splice(i, 1);
-    }
-  }
-
-  function burst(x, y, color) {
-    for (let i = 0; i < 28; i++) {
-      fx.particles.push({
-        x, y,
-        vx: (Math.random() - 0.5) * 400,
-        vy: (Math.random() - 0.5) * 400,
-        life: 0.8 + Math.random() * 0.6,
-        color
-      });
-    }
-  }
-
-  // Drawing
-  function draw() {
-    const lvl = levels[levelIndex];
-
-    // Clear
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Background gradient
-    const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    g.addColorStop(0, '#08101f');
-    g.addColorStop(1, '#0e1526');
-    ctx.fillStyle = g;
+  // beat flash overlay
+  if (beatFlash > 0) {
+    const alpha = beatFlash * 0.25;
+    ctx.fillStyle = `rgba(77,177,255,${alpha})`;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Parallax
-    if (lvl.fx.parallax) {
-      for (const layer of fx.parallaxLayers) {
-        ctx.fillStyle = layer.color;
-        const baseX = -((camX) * layer.speed % 1200);
-        for (let i = -1; i < 4; i++) {
-          ctx.fillRect(baseX + i * 1200, canvas.height - 220, 1200, 220);
-          for (const h of layer.hills) {
-            const x = baseX + i * 1200 + h.x;
-            const y = canvas.height - 220;
-            ctx.beginPath();
-            ctx.moveTo(x, y);
-            ctx.lineTo(x + h.w / 2, y - h.h);
-            ctx.lineTo(x + h.w, y);
-            ctx.closePath();
-            ctx.fill();
-          }
-        }
-      }
-    }
-
-    // Ground
-    ctx.fillStyle = '#182642';
-    const groundScreenX = -camX % 200;
-    for (let i = -1; i < 6; i++) {
-      ctx.fillRect(groundScreenX + i * 200, groundY, 200, canvas.height - groundY);
-    }
-    // Ground top line
-    ctx.strokeStyle = '#2b3c60';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(0, groundY);
-    ctx.lineTo(canvas.width, groundY);
-    ctx.stroke();
-
-    // Spikes
-    for (const s of spikes) {
-      const sx = s.x - camX;
-      const sy = s.y;
-      if (sx < -60 || sx > canvas.width + 60) continue;
-      drawSpike(sx, sy, s.w, s.h);
-    }
-
-    // Player
-    const px = player.x - camX;
-    const py = player.y;
-    if (lvl.fx.glow) {
-      ctx.shadowColor = lvl.color;
-      ctx.shadowBlur = 28;
-    } else {
-      ctx.shadowBlur = 0;
-    }
-
-    // Body
-    ctx.fillStyle = '#2f86ff';
-    ctx.fillRect(px, py, player.w, player.h);
-    // Face
-    ctx.fillStyle = '#0b2a66';
-    drawEye(px + 10, py + 16, 8);
-    drawEye(px + player.w - 18, py + 16, 8);
-    drawMouth(px + 12, py + 30, player.w - 24);
-
-    // Particles
-    ctx.shadowBlur = 0;
-    for (const p of fx.particles) {
-      const sx = p.x - camX;
-      if (sx < -20 || sx > canvas.width + 20) continue;
-      const a = Math.max(0, Math.min(1, p.life));
-      ctx.globalAlpha = a;
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(sx, p.y, 3 + 2 * a, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-
-    // HUD overlays already managed via DOM
+    beatFlash = Math.max(0, beatFlash - 0.08);
   }
 
-  function drawSpike(x, y, w, h) {
-    ctx.fillStyle = '#cde2ff';
+  // scanlines
+  if (lvl.theme.fx.scanlines) {
+    ctx.globalAlpha = 0.06;
+    ctx.fillStyle = '#000';
+    for (let y = 0; y < canvas.height; y += 4) {
+      ctx.fillRect(0, y, canvas.width, 2);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // heat shimmer (final level)
+  if (lvl.theme.fx.heat) {
+    const amplitude = 2;
+    const wavelength = 120;
+    ctx.save();
+    ctx.globalAlpha = 0.04;
+    for (let y = canvas.height - 160; y < canvas.height; y += 8) {
+      const offset = Math.sin((t + y) / wavelength) * amplitude;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(offset, y, canvas.width, 1);
+    }
+    ctx.restore();
+  }
+}
+
+function drawGround(lvl) {
+  ctx.fillStyle = lvl.theme.ground;
+  const groundHeight = canvas.height - lvl.floorY;
+  ctx.fillRect(0, canvas.height - groundHeight, canvas.width, groundHeight);
+}
+
+function drawSpikes(lvl) {
+  ctx.save();
+  ctx.shadowColor = '#000';
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = '#d64b6a';
+  lvl.spikes.forEach(s => {
+    const sx = s.x - cameraX;
+    const baseY = lvl.floorY;
+    if (sx + s.w < 0 || sx > canvas.width) return;
+    // draw triangle spike
     ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + w / 2, y - h);
-    ctx.lineTo(x + w, y);
+    ctx.moveTo(sx, baseY);
+    ctx.lineTo(sx + s.w / 2, baseY - s.h);
+    ctx.lineTo(sx + s.w, baseY);
     ctx.closePath();
     ctx.fill();
-    // Base
-    ctx.fillStyle = '#8aa7cf';
-    ctx.fillRect(x, y, w, 6);
+  });
+  ctx.restore();
+}
+
+function drawPlayer(lvl, t) {
+  const px = player.x - cameraX;
+  const py = player.y;
+
+  // glow/chroma
+  if (lvl.theme.fx.glow) {
+    ctx.save();
+    ctx.shadowColor = lvl.theme.accent;
+    ctx.shadowBlur = 20;
   }
 
-  function drawEye(x, y, r) {
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.arc(x - 2, y - 2, r * 0.35, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#0b2a66';
+  // body (blue block with face)
+  ctx.fillStyle = '#3aa7ff';
+  ctx.fillRect(px, py, player.w, player.h);
+  // face
+  ctx.fillStyle = '#0a2540';
+  // eyes
+  ctx.fillRect(px + 10, py + 12, 8, 8);
+  ctx.fillRect(px + player.w - 18, py + 12, 8, 8);
+  // mouth
+  ctx.fillRect(px + 14, py + 28, 16, 5);
+
+  if (lvl.theme.fx.glow) ctx.restore();
+
+  // chroma edge
+  if (lvl.theme.fx.chroma) {
+    ctx.strokeStyle = lvl.theme.accent;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px - 1, py - 1, player.w + 2, player.h + 2);
   }
 
-  function drawMouth(x, y, w) {
-    ctx.fillRect(x, y, w, 6);
+  // jump particles
+  if (!player.onGround && Math.random() < 0.12) {
+    spawnParticles(player.x + player.w / 2, player.y + player.h, 1, '#7ef5ff');
+  }
+}
+
+function drawParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.2;
+    p.life -= 0.02;
+    if (p.life <= 0) {
+      particles.splice(i, 1);
+      continue;
+    }
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    const px = p.x - cameraX;
+    ctx.fillRect(px, p.y, 3, 3);
+    ctx.globalAlpha = 1;
+  }
+}
+
+function physics(lvl) {
+  // horizontal auto-run
+  player.x += player.vx;
+
+  // vertical
+  player.vy += lvl.gravity;
+  player.y += player.vy;
+
+  // ground collision
+  if (player.y + player.h >= lvl.floorY) {
+    player.y = lvl.floorY - player.h;
+    player.vy = 0;
+    player.onGround = true;
+  } else {
+    player.onGround = false;
   }
 
-  // Initial UI
-  updateLevelName();
-})();
+  // queued jump
+  if (jumpQueued && player.onGround) {
+    player.vy = lvl.jumpVel;
+    player.onGround = false;
+    jumpQueued = false;
+    // small burst
+    spawnParticles(player.x + player.w / 2, player.y + player.h, 8, '#4db1ff');
+  } else {
+    jumpQueued = false;
+  }
+
+  // camera follows, keeps player centered
+  const targetCam = player.x - canvas.width / 2;
+  cameraX = lerp(cameraX, targetCam, 0.15);
+
+  // map bounds: keep character above map
+  player.y = Math.min(player.y, lvl.floorY - player.h);
+
+  // spike collisions
+  const pr = playerRect();
+  for (const s of lvl.spikes) {
+    const spikeRect = { x: s.x, y: lvl.floorY - s.h, w: s.w, h: s.h };
+    if (intersects(pr, spikeRect)) {
+      dieAndRestart();
+      break;
+    }
+  }
+
+  // level end
+  if (player.x > lvl.length) {
+    completeLevel();
+  }
+}
+
+function draw(lvl, t) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawBackground(lvl, t);
+  drawGround(lvl);
+  drawSpikes(lvl);
+  drawPlayer(lvl, t);
+  drawParticles();
+}
+
+function loop(now) {
+  if (!running) return;
+  if (paused) { requestAnimationFrame(loop); return; }
+  const dt = (now - lastTime) / 1000;
+  lastTime = now;
+
+  const lvl = LEVELS[currentLevelIndex];
+  physics(lvl);
+  draw(lvl, now);
+
+  requestAnimationFrame(loop);
+}
+
+// Initialize
+updateHomeUI();
